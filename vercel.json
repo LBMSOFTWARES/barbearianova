@@ -5,6 +5,7 @@
       "use": "@vercel/python"
     }
   ],
+  "buildCommand": "bash build.sh",
   "routes": [
     {
       "src": "/static/(.*)",
