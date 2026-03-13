@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% load static %}
+{% csrf_token %}
+    {% block content %}
+    <div class="body1">
+        <div><a href="{% url 'home' %}">
+            <img class="logo-img" src="{% static 'img/logo.png' %}" alt=""></a>
+        </div>
+        <div>
+            <p>{{endereco}}  <strong><a href="{{link_map}}">Ver mapa</a></strong> </p>
+        </div>
+        <div>
+            {% if e_barbeiro %}
+            <a class="btn1" href="#">AGENDA</a>
+            {% else %}
+            <a class="btn1" href="{% url 'meus_agendamentos' %}">Meus Agendamentos</a>
+            {% endif %}
+        </div>
+    </div>
+    <div>
+        
+        <div class="servicos-container">
+            <form method="POST" action="{% url 'agendar' %}">
+            {% csrf_token %}
+            {% for servico in servicos %}
+                <div class="servico-item">
+                    <label class="servico-label">
+                        <input 
+                            type="checkbox" 
+                            name="servicos" 
+                            value="{{ servico.id }}"
+                            class="checkbox-servico"
+                        >
+
+                        <div class="conteudo-servico">
+                            <div class="linha-superior">
+                                <span class="titulo">
+                                    {{ servico.titulo }}
+                                    <span class="tempo">({{ servico.duracao_minutos }} min)</span>
+                                </span>
+                            </div>
+
+                            <span class="preco">R$ {{ servico.preco }}</span>
+                        </div>
+                    </label>
+                </div>
+
+            {% empty %}
+                <p class="sem-servicos">Nenhum serviço cadastrado.</p>
+            {% endfor %}
+            
+            <div style="margin-top:20px;text-align:center;">
+                <button type="submit" class="btn2">
+                    Continuar Agendamento
+                </button>
+            </div>
+            </form>
+        </div>
+    </div>
+    {% endblock %}

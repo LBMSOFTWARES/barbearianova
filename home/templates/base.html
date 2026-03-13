@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+{% load static %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <script src="{% static 'js/htmx.min.js' %}"></script>
+    <script src="{% static 'js/script.js' %}"></script>
+    {% block extrahead %}
+    {% endblock %}
+    <title>Barbearia</title>
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+    {% block content %}
+    {% endblock %}
+<footer>
+    <p>Criado por <strong>LBM SOFTWARES</strong></p>
+</footer>
+</body>
+</html>

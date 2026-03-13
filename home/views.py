@@ -1,0 +1,367 @@
+from django.shortcuts import render, redirect, get_object_or_404
+from django.http import HttpResponse
+from django.db import IntegrityError
+from django.contrib.auth.hashers import make_password, check_password
+from newsitebarb.dados import ENDERECO, LINK_MAPA
+from .models import *
+from datetime import date, timedelta, datetime
+from django.utils import timezone
+# Create your views here.
+
+def Home(request):
+    endereco = ENDERECO
+    link_map = LINK_MAPA
+    try:
+        usuario_id = request.session['usuario']
+    except:
+        usuario_id = None
+    servicos = Servicos.objects.all()
+    if usuario_id == None:
+        return redirect("realizar_cadastro")
+    else:
+        user_logado = True
+        usuario = Usuarios.objects.get(id=usuario_id)
+        nome_usuario = usuario.nome
+        e_barbeiro = usuario.e_barbeiro
+        return render(request, 'home.html',{
+            'nome_usuario':nome_usuario,
+            'endereco':endereco,
+            'ver_mapa':link_map,
+            'user_logado':user_logado,
+            "servicos": servicos,
+            'e_barbeiro':e_barbeiro
+            })
+        
+def RealizarCadastro(request):
+    endereco = ENDERECO
+    link_map = LINK_MAPA
+    return render(request, 'realizar_cadastro.html',{'endereco':endereco,
+            'ver_mapa':link_map,})
+
+def cadastrar(request):
+    if request.method == 'POST':
+        nome = request.POST.get('nome')
+        telefone = request.POST.get('telefone')
+        email = request.POST.get('email')
+        senha = request.POST.get('senha')
+        try:
+            usuario = Usuarios.objects.create(
+                nome=nome,
+                telefone=telefone,
+                email=email,
+                senha=make_password(senha)
+            )
+            request.session['usuario'] = usuario.id
+            return redirect('home')
+
+        except IntegrityError:
+            # email já cadastrado (unique=True)
+            return render(request, 'realizar_cadastro.html', {
+                'erro': 'Este e-mail já está cadastrado.',
+                
+            })
+    else:
+        return redirect('home')
+    
+
+def login(request):
+    endereco = ENDERECO
+    link_map = LINK_MAPA
+    if request.method == 'POST':
+        email = request.POST.get('email')
+        senha = request.POST.get('senha')
+        try:
+            usuario = Usuarios.objects.get(email=email)
+            print(usuario)
+            if check_password(senha, usuario.senha):
+                # salva sessão
+                request.session['usuario'] = usuario.id
+                return redirect('home')
+            else:
+                return render(request, 'login.html', {
+                    'erro': 'Senha incorreta.',
+                    'endereco':endereco,
+                    'ver_mapa':link_map,
+                })
+
+        except Usuarios.DoesNotExist:
+            return render(request, 'login.html', {
+                'erro': 'Usuário não encontrado.'
+            })
+
+    return render(request, 'login.html', {
+                    'endereco':endereco,
+                    'ver_mapa':link_map,
+    })
+
+
+
+
+
+
+def agendar(request):
+    user_logado = 'usuario' in request.session
+    if request.method == 'POST':
+        servicos_ids = request.POST.getlist('servicos')
+
+        if not servicos_ids:
+            return HttpResponse("Selecione pelo menos um serviço.")
+
+        servicos = Servicos.objects.filter(id__in=servicos_ids)
+
+        tempo_total = sum(s.duracao_minutos for s in servicos)
+        preco_total = sum(s.preco for s in servicos)
+
+        nomes_servicos = ", ".join(s.titulo for s in servicos)
+
+        # adiciona o preço na mesma string
+        nomes_servicos = f"{nomes_servicos} - VALOR TOTAL: R$ {preco_total}"
+
+        # salvar na sessão
+        request.session['servicos_selecionados'] = servicos_ids
+        request.session['tempo_total'] = tempo_total
+
+    else:
+        return HttpResponse("Método inválido.")
+    
+
+    hoje = date.today()
+    dias = []
+
+    dias_semana = {
+        'Monday': 'Segunda',
+        'Tuesday': 'Terça',
+        'Wednesday': 'Quarta',
+        'Thursday': 'Quinta',
+        'Friday': 'Sexta',
+        'Saturday': 'Sábado',
+        'Sunday': 'Domingo',
+    }
+
+    for i in range(30):
+        dia = hoje + timedelta(days=i)
+        dias.append({
+            'data': dia,
+            'dia_semana': dias_semana[dia.strftime('%A')],
+            'dia': dia.strftime('%d'),
+            'mes': dia.strftime('%m'),
+        })
+
+    barbeiros = Barbeiros.objects.all()
+
+    return render(request, 'agendamento.html', {
+        'user_logado': user_logado,
+        'dias': dias,
+        'barbeiros': barbeiros,
+        'servico_nome': nomes_servicos,
+        'servico_tempo': tempo_total,
+    })
+
+
+
+def agenda_barbeiro_htmx(request):
+
+    dia = request.POST.get('dia')
+    barbeiro_id = request.POST.get('barbeiro')
+
+    if not dia or not barbeiro_id:
+        return HttpResponse("<p>Selecione dia e barbeiro</p>")
+
+    data = datetime.fromisoformat(dia).date()
+    dia_semana = data.weekday()
+
+    barbeiro = Barbeiros.objects.get(id=barbeiro_id)
+
+    try:
+        expediente = Expediente.objects.get(
+            dia_semana=dia_semana,
+            ativo=True
+        )
+    except Expediente.DoesNotExist:
+        return HttpResponse("<p>❌ Barbearia fechada neste dia</p>")
+
+    intervalo = timedelta(minutes=15)
+
+    # horário atual correto
+    agora = timezone.localtime()
+    limite_minimo = (agora + timedelta(minutes=30)).time()
+
+    agendamentos = Agendamentos.objects.filter(
+        barbeiro=barbeiro,
+        data__date=data
+    )
+
+    horarios_ocupados = set()
+
+    for ag in agendamentos:
+        inicio = datetime.combine(data, ag.hora_inicio)
+        fim = datetime.combine(data, ag.hora_fim)
+
+        atual = inicio
+
+        while atual < fim:
+            horarios_ocupados.add(atual.time())
+            atual += intervalo
+
+    horarios_disponiveis = []
+
+    def gerar_horarios(inicio, fim):
+
+        if not inicio or not fim:
+            return
+
+        atual = datetime.combine(data, inicio)
+        limite = datetime.combine(data, fim)
+
+        while atual < limite:
+
+            hora_atual = atual.time()
+
+            if hora_atual not in horarios_ocupados:
+
+                if data == agora.date():
+
+                    if hora_atual >= limite_minimo:
+                        horarios_disponiveis.append(hora_atual)
+
+                else:
+                    horarios_disponiveis.append(hora_atual)
+
+            atual += intervalo
+
+    gerar_horarios(expediente.inicio_manha, expediente.fim_manha)
+    gerar_horarios(expediente.inicio_tarde, expediente.fim_tarde)
+
+    if not horarios_disponiveis:
+        return HttpResponse("<p>❌ Nenhum horário disponível</p>")
+
+    horarios_formatados = [h.strftime('%H:%M') for h in horarios_disponiveis]
+
+    return render(request, 'partials/mostrar_agenda.html', {
+        'horarios': horarios_formatados
+    })
+
+
+
+def confirmar_agendamento(request):
+    if request.method != 'POST':
+        return redirect('home')
+
+    usuario_id = request.session.get('usuario')
+    if not usuario_id:
+        return redirect('login')
+
+    usuario = Usuarios.objects.get(id=usuario_id)
+
+    dia = request.POST.get('dia')
+    horario_inicio = request.POST.get('horario_inicio')
+    barbeiro_id = request.POST.get('barbeiro')
+
+    # 🔥 agora vem direto do hidden input
+    nomes_servicos = request.POST.get('servico_nome')
+    duracao_total = int(request.POST.get('duracao'))
+
+    if not nomes_servicos or not duracao_total:
+        return redirect('home')
+
+    # 🔥 converter data e hora
+    data = datetime.fromisoformat(dia).date()
+    hora_inicio = datetime.strptime(horario_inicio, '%H:%M').time()
+
+    inicio_dt = datetime.combine(data, hora_inicio)
+    fim_dt = inicio_dt + timedelta(minutes=duracao_total)
+
+    Agendamentos.objects.create(
+        usuario=usuario,
+        servico=nomes_servicos,  # já vem concatenado
+        barbeiro=Barbeiros.objects.get(id=barbeiro_id),
+        data=inicio_dt,
+        hora_inicio=hora_inicio,
+        hora_fim=fim_dt.time()
+    )
+
+    return render(request, 'agendamento_sucesso.html', {
+        'cliente': usuario.nome,
+        'data': data.strftime('%d/%m/%Y'),
+        'hora': horario_inicio,
+        'user_logado': True,
+        'endereco': ENDERECO,
+        'ver_mapa': LINK_MAPA,
+    })
+
+
+def ver_agendamentos(request):
+    endereco = ENDERECO
+    link_map = LINK_MAPA
+    usuario_id = request.session.get('usuario')
+    user_logado = True
+
+    if not usuario_id:
+        return redirect('cadastro')
+
+    usuario = Usuarios.objects.get(id=usuario_id)
+
+    # 👉 SE FOR BARBEIRO
+    if usuario.e_barbeiro:
+        print("IF É BARBEIRO")
+        barbeiro = usuario.nome_barbeiro
+
+        try:
+            print("TRY É BARBEIRO")
+            agendamentos = Agendamentos.objects.filter(
+                barbeiro=barbeiro,
+                data__gte=date.today()   # 👈 aqui
+            ).order_by('data', 'hora_inicio')
+
+            return render(request, 'meus_agendamentos.html', {
+                'usuario': usuario,
+                'barbeiro': barbeiro,
+                'agendamentos': agendamentos,
+                'e_barbeiro': True,
+                'user_logado': user_logado,
+                'endereco': endereco,
+                'ver_mapa': link_map,
+            })
+
+        except:
+            return render(request, 'meus_agendamentos.html', {
+                'usuario': usuario,
+                'barbeiro': barbeiro,
+                'agendamentos': "<p>❌ Sem agendamentos para mostrar</p>",
+                'e_barbeiro': True,
+                'user_logado': user_logado,
+                'endereco': endereco,
+                'ver_mapa': link_map,
+            })
+
+    agendamentos = Agendamentos.objects.filter(
+        usuario=usuario,
+        data__gte=date.today()   # 👈 aqui também
+    ).order_by('data', 'hora_inicio')
+
+    return render(request, 'meus_agendamentos.html', {
+        'agendamentos': agendamentos,
+        'usuario': usuario,
+        'user_logado': user_logado,
+        'endereco': endereco,
+        'ver_mapa': link_map,
+        'meus_agendamentos': True
+    })
+
+
+def cancelar_agendamento(request, agendamento_id):
+    usuario_id = request.session.get('usuario')
+    print("CANCELAR AGENDAMENTO")
+    if not usuario_id:
+        return redirect('cadastro')
+    
+    agendamento = get_object_or_404(
+        Agendamentos,
+        id=agendamento_id,
+        usuario_id=usuario_id
+    )
+    print(agendamento)
+    if request.method == 'POST':
+        agendamento.delete()
+    return redirect('meus_agendamentos')
+
