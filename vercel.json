@@ -5,12 +5,7 @@
       "use": "@vercel/python"
     }
   ],
-  "buildCommand": "bash build.sh",
   "routes": [
-    {
-      "src": "/static/(.*)",
-      "dest": "/staticfiles/$1"
-    },
     {
       "src": "/(.*)",
       "dest": "newsitebarb/wsgi.py"
