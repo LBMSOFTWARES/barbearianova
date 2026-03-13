@@ -1,0 +1,18 @@
+{
+  "builds": [
+    {
+      "src": "newsitebarb/wsgi.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/static/(.*)",
+      "dest": "/static/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "newsitebarb/wsgi.py"
+    }
+  ]
+}
