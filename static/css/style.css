@@ -2,7 +2,7 @@ body{
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    margin: 0; 
+    margin: 0;
 }
 footer{
     display: flex;
@@ -382,7 +382,7 @@ footer{
 }
 
 .barbeiro-card{
-    width: 110px;
+    width: 120px;
     border: 2px solid #eee;
     border-radius: 12px;
     padding: 12px;
@@ -711,4 +711,10 @@ footer{
 
 .btn-primary:hover{
     background:#000;
+}
+
+
+.barbeiro-foto{
+    width: 120px;
+    height: 120px;
 }
