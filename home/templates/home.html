@@ -11,7 +11,7 @@
         </div>
         <div>
             {% if e_barbeiro %}
-            <a class="btn1" href="#">AGENDA</a>
+            <a class="btn1" href="{% url 'meus_agendamentos' %}">AGENDA</a>
             {% else %}
             <a class="btn1" href="{% url 'meus_agendamentos' %}">Meus Agendamentos</a>
             {% endif %}
