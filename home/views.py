@@ -6,11 +6,15 @@ from newsitebarb.dados import ENDERECO, LINK_MAPA
 from .models import *
 from datetime import date, timedelta, datetime
 from django.utils import timezone
+from django.core.mail import send_mail
+import random
+
 # Create your views here.
 
 def Home(request):
     endereco = ENDERECO
     link_map = LINK_MAPA
+    
     try:
         usuario_id = request.session['usuario']
     except:
@@ -354,14 +358,90 @@ def cancelar_agendamento(request, agendamento_id):
     print("CANCELAR AGENDAMENTO")
     if not usuario_id:
         return redirect('cadastro')
-    
-    agendamento = get_object_or_404(
+    if request.method == 'POST':
+        agendamento = get_object_or_404(
         Agendamentos,
         id=agendamento_id,
         usuario_id=usuario_id
-    )
-    print(agendamento)
-    if request.method == 'POST':
+        )
+        print(agendamento)
         agendamento.delete()
     return redirect('meus_agendamentos')
 
+
+def recuperar_senha(request):
+    return render(request, 'recuperar_senha.html')
+
+def redefinir_senha(request):
+    if request.method == 'POST':
+        email = request.POST.get('email')
+        usuario = Usuarios.objects.filter(email=email).first()
+        if usuario:
+            codigo = random.randint(1000, 9999)
+            usuario.codigo_redf = codigo
+            usuario.save()
+            dominio = request.POST.get('dominio')
+            print(dominio)
+            if dominio:
+                # montar link
+                link_redef = f"{dominio}/nova_senha/{codigo}"
+
+                nome = usuario.nome
+
+                # enviar email
+                send_mail(
+                    'Redefinir senha',
+                    f'Olá {nome},\n\nClique nesse link para redefinir sua senha:\n{link_redef}',
+                    None,  # usa DEFAULT_FROM_EMAIL
+                    [email],
+                    fail_silently=False
+                )
+                return HttpResponse(f"{nome}, um email foi enviado com as instruções para redefinir sua senha. Vá até seu email e siga os passos.")
+            else:
+                return render(request, 'redefinir_senha.html', {
+            'erro': 'Algo de estranho aconteceu, contate o administrador.'
+            })
+        else: 
+            return render(request, 'redefinir_senha.html', {
+            'erro': 'E-mail não encontrado'
+        })
+
+def nova_senha(request, codigo):
+    print(codigo)  # aqui vem os 4 dígitos
+    usuario = Usuarios.objects.filter(codigo_redf=codigo).first()
+    if usuario:
+        return render(request, 'nova_senha.html', {'usuario':usuario})
+    else:
+        return HttpResponse("Algo deu errado, contate o administrador")
+    
+def config_nova_senha(request):
+    if request.method == 'POST':
+        id_usuario = request.POST.get('id_usuario')
+        senha = request.POST.get('senha')
+        confirmar = request.POST.get('confirmar')
+        print(id_usuario)
+        try:
+            usuario = Usuarios.objects.get(id=id_usuario)
+        except Usuarios.DoesNotExist:
+            return render(request, 'nova_senha.html', {
+                'erro': 'Usuário não encontrado'
+            })
+
+        # validação de senha
+        if senha != confirmar:
+            return render(request, 'nova_senha.html', {
+                'usuario': usuario,
+                'erro': 'As senhas devem ser iguais'
+            })
+
+        # salvar senha com hash
+        usuario.senha = make_password(senha)
+
+        # limpar código de redefinição
+        usuario.codigo_redf = 0
+        
+        usuario.save()
+        request.session['usuario'] = id_usuario
+        return render(request, 'senha_sucesso.html')
+
+    return redirect('redefinir_senha')
