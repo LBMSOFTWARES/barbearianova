@@ -3,7 +3,7 @@
 
 <div class="cadastro-container">
 
-    <h2>Entrar na sua conta</h2>
+    <h2>Recuperar sua conta</h2>
 
     {% if erro %}
     <div class="modal-overlay" id="erroModal">
@@ -15,33 +15,19 @@
     </div>
     {% endif %}
 
-    <form method="POST" action="{% url 'login' %}">
+    <form method="POST" action="{% url 'redefinir_senha' %}">
         {% csrf_token %}
 
         <div class="input-group">
             <label for="email">E-mail</label>
             <input type="email" id="email" name="email" required>
         </div>
-
-        <div class="input-group">
-            <label for="senha">Senha</label>
-            <input type="password" id="senha" name="senha" required>
-        </div>
-
+        <input type="hidden" name="dominio" value="{{ request.get_host }}">
         <button type="submit" class="btn-cadastrar">
-            Entrar
+            Redefinir senha
         </button>
 
     </form>
-
-    <div class="footer-text">
-        Ainda não tem conta?
-        <a href="{% url 'cadastro' %}">Cadastrar</a>
-    </div>
-    <div class="footer-text">
-        Esqueceu a senha?
-        <a href="{% url 'recuperar_senha' %}">Recuperar senha</a>
-    </div>
 
 </div>
 
